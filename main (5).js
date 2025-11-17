@@ -168,26 +168,45 @@ const GLOBAL_VERIFY_STORE = (function() {
     const NS = "NJJ_GlobalVerify_Store";
     const KEY_VERIFIED = "verified";
     const KEY_TIME = "verified_at";
-    const store = storages.create(NS);
+    let store = null;
+
+    function getStore() {
+        if (!store) {
+            try {
+                store = storages.create(NS);
+            } catch (e) {
+                console.error("创建存储失败: " + e);
+                // 返回一个模拟对象
+                return {
+                    get: function() { return false; },
+                    put: function() {}
+                };
+            }
+        }
+        return store;
+    }
 
     function isVerified() {
         try {
-            return !!store.get(KEY_VERIFIED, false);
+            return !!getStore().get(KEY_VERIFIED, false);
         } catch (e) {
+            console.error("读取验证状态失败: " + e);
             return false;
         }
     }
 
     function setVerified() {
         try {
-            store.put(KEY_VERIFIED, true);
-            store.put(KEY_TIME, new Date().getTime());
-        } catch (e) {}
+            getStore().put(KEY_VERIFIED, true);
+            getStore().put(KEY_TIME, new Date().getTime());
+        } catch (e) {
+            console.error("保存验证状态失败: " + e);
+        }
     }
 
     function getVerifiedTime() {
         try {
-            return store.get(KEY_TIME, null);
+            return getStore().get(KEY_TIME, null);
         } catch (e) {
             return null;
         }
@@ -2690,7 +2709,57 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
 })();
 
 (function start() {
-    // 启动时不触发任何敏感权限，仅展示 UI 和体检入口，避免“刚运行就重启/设置崩溃”
-    if (GLOBAL_VERIFY_STORE.isVerified()) Switcher.goHome();
-    else showGlobalVerify(() => Switcher.goHome());
+    try {
+        console.log("========== 程序启动 ==========");
+        console.log("AutoX.js 版本检查...");
+
+        // 检查必要的API
+        if (typeof ui === 'undefined') {
+            throw new Error("ui模块未定义，请确保使用AutoX.js运行");
+        }
+        if (typeof storages === 'undefined') {
+            console.warn("storages模块未定义");
+        }
+
+        console.log("检查验证状态...");
+        var isVerified = false;
+        try {
+            isVerified = GLOBAL_VERIFY_STORE.isVerified();
+            console.log("验证状态: " + (isVerified ? "已验证" : "未验证"));
+        } catch (e) {
+            console.error("检查验证状态失败: " + e);
+            isVerified = false;
+        }
+
+        console.log("准备显示UI...");
+        if (isVerified) {
+            Switcher.goHome();
+        } else {
+            showGlobalVerify(() => Switcher.goHome());
+        }
+        console.log("UI已显示");
+    } catch (e) {
+        console.error("========== 启动失败 ==========");
+        console.error("错误信息: " + e);
+        console.error("错误堆栈: " + (e.stack || "无堆栈"));
+
+        // 显示错误UI
+        try {
+            ui.layout(
+                <vertical padding="16" bg="#FFEBEE">
+                    <text text="⚠️ 程序启动失败" textSize="24sp" textStyle="bold" textColor="#C62828" margin="16"/>
+                    <text text={"错误信息: " + e} textSize="14sp" margin="8" textColor="#424242"/>
+                    <text text="请检查:" textSize="16sp" textStyle="bold" margin="16 8"/>
+                    <text text="1. 确认使用AutoX.js v6.5.2运行" textSize="14sp" margin="4"/>
+                    <text text="2. 检查无障碍服务是否开启" textSize="14sp" margin="4"/>
+                    <text text="3. 查看控制台日志获取详细信息" textSize="14sp" margin="4"/>
+                    <button id="exitButton" text="退出程序" margin="16"/>
+                </vertical>
+            );
+            ui.exitButton.click(() => exit());
+        } catch (uiError) {
+            console.error("无法显示错误UI: " + uiError);
+            toast("启动失败: " + e);
+        }
+    }
 })();
