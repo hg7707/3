@@ -1,5 +1,4 @@
 "ui";
-"use strict";
 
 // =================== 安全启动保护 ===================
 // 确保无论什么情况都能进入UI，延迟所有权限检查
@@ -9,7 +8,7 @@ try {
         // 不调用auto.waitFor()，让程序直接继续
     }
 } catch (e) {
-    console.error("启动保护异常（忽略）: " + e);
+    console.log("启动保护异常（忽略）: " + e);
 }
 
 
@@ -110,7 +109,7 @@ const SAFE = (function() {
 
     function warn() {
         try {
-            console.warn.apply(console, arguments);
+            console.log.apply(console, arguments);
         } catch (e) {
             log("[WARN]", e);
         }
@@ -118,7 +117,7 @@ const SAFE = (function() {
 
     function error() {
         try {
-            console.error.apply(console, arguments);
+            console.log.apply(console, arguments);
         } catch (e) {
             log("[ERR]", e);
         }
@@ -175,7 +174,7 @@ const GLOBAL_VERIFY_STORE = (function() {
             try {
                 store = storages.create(NS);
             } catch (e) {
-                console.error("创建存储失败: " + e);
+                console.log("创建存储失败: " + e);
                 // 返回一个模拟对象
                 return {
                     get: function() { return false; },
@@ -190,7 +189,7 @@ const GLOBAL_VERIFY_STORE = (function() {
         try {
             return !!getStore().get(KEY_VERIFIED, false);
         } catch (e) {
-            console.error("读取验证状态失败: " + e);
+            console.log("读取验证状态失败: " + e);
             return false;
         }
     }
@@ -200,7 +199,7 @@ const GLOBAL_VERIFY_STORE = (function() {
             getStore().put(KEY_VERIFIED, true);
             getStore().put(KEY_TIME, new Date().getTime());
         } catch (e) {
-            console.error("保存验证状态失败: " + e);
+            console.log("保存验证状态失败: " + e);
         }
     }
 
@@ -279,7 +278,7 @@ const Perms = (function() {
             // AutoX.js v6.5.2 标准检查
             return auto.service != null;
         } catch (e) {
-            console.warn("检查无障碍权限异常: " + e);
+            console.log("检查无障碍权限异常: " + e);
             return false;
         }
     }
@@ -297,7 +296,7 @@ const Perms = (function() {
                 return isValid;
             } catch (e) {
                 // 如果访问失败，说明service虽然不为null但已失效
-                console.warn("无障碍服务健康检查失败: " + e);
+                console.log("无障碍服务健康检查失败: " + e);
                 return false;
             }
         } catch (e) {
@@ -335,7 +334,7 @@ const Perms = (function() {
             if (typeof floaty === 'undefined') return false;
             return floaty && typeof floaty.checkPermission === "function" ? !!floaty.checkPermission() : false;
         } catch (e) {
-            console.warn("检查悬浮窗权限异常: " + e);
+            console.log("检查悬浮窗权限异常: " + e);
             return false;
         }
     }
@@ -350,7 +349,7 @@ const Perms = (function() {
             }
         } catch (e) {
             SAFE.warn("请求悬浮窗权限失败：" + e);
-            console.error("requestOverlay异常: " + e);
+            console.log("requestOverlay异常: " + e);
         }
         return false;
     }
@@ -364,7 +363,7 @@ const Perms = (function() {
                 return true;
             }
         } catch (e) {
-            console.warn("尝试截图异常: " + e);
+            console.log("尝试截图异常: " + e);
         }
         return false;
     }
@@ -383,12 +382,12 @@ const Perms = (function() {
                     }
                 } catch (e) {
                     SAFE.warn("截图权限请求失败[" + (i + 1) + "/" + maxTry + "]: " + e);
-                    console.error("requestScreenCapture异常: " + e);
+                    console.log("requestScreenCapture异常: " + e);
                 }
                 sleep(1200);
             }
         } catch (e) {
-            console.error("requestScreenCaptureInteractive异常: " + e);
+            console.log("requestScreenCaptureInteractive异常: " + e);
         }
         return false;
     }
@@ -967,7 +966,7 @@ const Switcher = (function() {
                         }
                     } catch (e) {
                         floatConsole.warn("方式A注册失败：" + e);
-                        console.error("observeKey异常: " + e);
+                        console.log("observeKey异常: " + e);
                     }
 
                     // 注册音量键监听（方式B：通用事件，使用保存的处理函数）
@@ -1032,7 +1031,7 @@ const Switcher = (function() {
                             lastAccessibilityCheck = now;
                         }
                     } catch (e) {
-                        console.error("健康检查异常: " + e);
+                        console.log("健康检查异常: " + e);
                     }
                 }, 30000); // 30秒检查一次
             }
@@ -1565,7 +1564,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                         floatConsole.log("📍 坐标: (" + targetX + ", " + targetY + ")");
                         
                         // 释放第一个screen
-                        try { if (screen) screen.recycle(); } catch (e) { console.error("释放screen异常: " + e); }
+                        try { if (screen) screen.recycle(); } catch (e) { console.log("释放screen异常: " + e); }
                         screen = null;
                         
                         sleep(2000);
@@ -1627,7 +1626,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                         return true;
                     } catch (e) {
                         floatConsole.error("checkAndClickReward异常: " + e);
-                        console.error("checkAndClickReward异常详情: " + e);
+                        console.log("checkAndClickReward异常详情: " + e);
                         return false;
                     } finally {
                         // 确保释放所有图片资源
@@ -2008,7 +2007,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                         if (p) {
                             if (typeof p.x !== 'number' || typeof p.y !== 'number' ||
                                 !isFinite(p.x) || !isFinite(p.y)) {
-                                console.error("保存失败：坐标无效 " + k + " = " + JSON.stringify(p));
+                                console.log("保存失败：坐标无效 " + k + " = " + JSON.stringify(p));
                                 toast("保存失败：坐标数据无效");
                                 return;
                             }
@@ -2020,7 +2019,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                     console.log("✓ 标记已保存: " + JSON.stringify(points));
                     toast("✅ 标记已保存");
                 } catch (e) {
-                    console.error("保存失败: " + e);
+                    console.log("保存失败: " + e);
                     toast("保存失败：" + e);
                 }
             }
@@ -2043,7 +2042,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                         let ok = true;
                         for (let k of keyOrder) {
                             if (!(k in saved)) {
-                                console.warn("缺少键: " + k);
+                                console.log("缺少键: " + k);
                                 ok = false;
                                 break;
                             }
@@ -2053,7 +2052,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                                 typeof v.x !== "number" || typeof v.y !== "number" ||
                                 !isFinite(v.x) || !isFinite(v.y) ||
                                 v.x < 0 || v.y < 0 || v.x > 10000 || v.y > 10000) {
-                                console.warn("无效坐标: " + k + " = " + JSON.stringify(v));
+                                console.log("无效坐标: " + k + " = " + JSON.stringify(v));
                                 ok = false;
                                 break;
                             }
@@ -2071,13 +2070,13 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                             console.log("✓ 成功加载标记: " + JSON.stringify(points));
                             return true;
                         } else {
-                            console.error("标记数据验证失败");
+                            console.log("标记数据验证失败");
                         }
                     } else {
                         console.log("没有保存的标记数据");
                     }
                 } catch (e) {
-                    console.error("加载标记失败: " + e);
+                    console.log("加载标记失败: " + e);
                 }
                 if (showToast) toast("未发现可用的历史标记");
                 return false;
@@ -2242,7 +2241,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                         events.observeKey();
                     } catch (e) {
                         toast("音量键监听初始化失败");
-                        console.error("observeKey异常: " + e);
+                        console.log("observeKey异常: " + e);
                         // 出错了，恢复状态
                         volumeKeyEnabled = false;
                         ui.toggleVolumeKey.setText("启用音量键控制");
@@ -2326,7 +2325,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                                                     ui.run(() => {
                                                         toast("❌ 无障碍服务已关闭,无法连点");
                                                     });
-                                                    console.error("无障碍服务未开启");
+                                                    console.log("无障碍服务未开启");
                                                     running = false;
                                                     ui.run(() => updateStatus());
                                                     return;
@@ -2345,7 +2344,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                                                     ui.run(() => {
                                                         toast("❌ 以下坐标无效:" + invalidPoints.join(", "));
                                                     });
-                                                    console.error("无效坐标:" + JSON.stringify(invalidPoints));
+                                                    console.log("无效坐标:" + JSON.stringify(invalidPoints));
                                                     running = false;
                                                     ui.run(() => updateStatus());
                                                     return;
@@ -2360,7 +2359,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                                                     ui.run(() => {
                                                         toast("❌ 点击测试失败,请检查权限:" + testError);
                                                     });
-                                                    console.error("测试点击失败:" + testError);
+                                                    console.log("测试点击失败:" + testError);
                                                     running = false;
                                                     ui.run(() => updateStatus());
                                                     return;
@@ -2392,7 +2391,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                                                                 let name = keyOrder[i];
                                                                 let p = points[name];
                                                                 if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') {
-                                                                    console.warn("跳过无效坐标:" + name);
+                                                                    console.log("跳过无效坐标:" + name);
                                                                     continue;
                                                                 }
                                                                 
@@ -2416,24 +2415,24 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                                                                             try {
                                                                                 ui.statusText.setText("状态:连点中…(累计 " + clickCount + " 次)");
                                                                             } catch (e) {
-                                                                                console.error("更新UI失败:" + e);
+                                                                                console.log("更新UI失败:" + e);
                                                                             }
                                                                         });
                                                                     }
                                                                 } catch (clickError) {
-                                                                    console.error("点击异常 [" + name + "]:" + clickError);
+                                                                    console.log("点击异常 [" + name + "]:" + clickError);
                                                                     sleep(100);
                                                                 }
                                                             }
                                                         } catch (loopError) {
-                                                            console.error("连点循环异常:" + loopError);
+                                                            console.log("连点循环异常:" + loopError);
                                                             sleep(500);
                                                         }
                                                     }
                                                     
                                                     console.log("连点循环结束,总点击:" + clickCount);
                                                 } catch (e) {
-                                                    console.error("连点线程致命错误:" + e);
+                                                    console.log("连点线程致命错误:" + e);
                                                     ui.run(() => {
                                                         toast("连点出错:" + e);
                                                         try {
@@ -2446,7 +2445,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                                                 ui.run(() => updateStatus());
                                                 
                                             } catch (e) {
-                                                console.error("启动线程异常:" + e);
+                                                console.log("启动线程异常:" + e);
                                                 ui.run(() => {
                                                     toast("启动失败:" + e);
                                                 });
@@ -2467,7 +2466,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                                     }
                                     return true;
                                 } catch (handlerError) {
-                                    console.error("音量键处理异常:" + handlerError);
+                                    console.log("音量键处理异常:" + handlerError);
                                     toast("处理异常:" + handlerError);
                                     return false;
                                 }
@@ -2484,7 +2483,7 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
                             console.log("✓ 音量键监听器注册成功");
                             
                         } catch (regError) {
-                            console.error("注册音量键监听器失败:" + regError);
+                            console.log("注册音量键监听器失败:" + regError);
                             toast("启用失败:" + regError);
                             volumeKeyEnabled = false;
                             ui.run(() => {
@@ -2710,56 +2709,40 @@ try { CONFIG.focusAfterQW = CONFIG.focusAfterQW || {}; CONFIG.focusAfterQW.windo
 
 (function start() {
     try {
-        console.log("========== 程序启动 ==========");
-        console.log("AutoX.js 版本检查...");
+        toast("程序启动中...");
+        console.log("程序启动");
 
-        // 检查必要的API
-        if (typeof ui === 'undefined') {
-            throw new Error("ui模块未定义，请确保使用AutoX.js运行");
-        }
-        if (typeof storages === 'undefined') {
-            console.warn("storages模块未定义");
-        }
-
-        console.log("检查验证状态...");
         var isVerified = false;
         try {
             isVerified = GLOBAL_VERIFY_STORE.isVerified();
-            console.log("验证状态: " + (isVerified ? "已验证" : "未验证"));
         } catch (e) {
-            console.error("检查验证状态失败: " + e);
-            isVerified = false;
+            console.log("检查验证失败: " + e);
         }
 
-        console.log("准备显示UI...");
         if (isVerified) {
             Switcher.goHome();
         } else {
-            showGlobalVerify(() => Switcher.goHome());
+            showGlobalVerify(function() {
+                Switcher.goHome();
+            });
         }
-        console.log("UI已显示");
     } catch (e) {
-        console.error("========== 启动失败 ==========");
-        console.error("错误信息: " + e);
-        console.error("错误堆栈: " + (e.stack || "无堆栈"));
+        console.log("启动失败: " + e);
+        toast("启动失败，请查看控制台");
 
-        // 显示错误UI
         try {
             ui.layout(
                 <vertical padding="16" bg="#FFEBEE">
-                    <text text="⚠️ 程序启动失败" textSize="24sp" textStyle="bold" textColor="#C62828" margin="16"/>
-                    <text text={"错误信息: " + e} textSize="14sp" margin="8" textColor="#424242"/>
-                    <text text="请检查:" textSize="16sp" textStyle="bold" margin="16 8"/>
-                    <text text="1. 确认使用AutoX.js v6.5.2运行" textSize="14sp" margin="4"/>
-                    <text text="2. 检查无障碍服务是否开启" textSize="14sp" margin="4"/>
-                    <text text="3. 查看控制台日志获取详细信息" textSize="14sp" margin="4"/>
-                    <button id="exitButton" text="退出程序" margin="16"/>
+                    <text text="程序启动失败" textSize="24sp" margin="16"/>
+                    <text text="请查看控制台日志" textSize="14sp" margin="8"/>
+                    <button id="exitBtn" text="退出" margin="16"/>
                 </vertical>
             );
-            ui.exitButton.click(() => exit());
-        } catch (uiError) {
-            console.error("无法显示错误UI: " + uiError);
-            toast("启动失败: " + e);
+            ui.exitBtn.click(function() {
+                exit();
+            });
+        } catch (uiErr) {
+            console.log("无法显示UI: " + uiErr);
         }
     }
 })();
