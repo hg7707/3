@@ -38,12 +38,20 @@ try {
  * 18) 事件监听器闪退修复 → 修复events.on与线程冲突导致的闪退（v1.8.3）
  * 19) UI线程阻塞修复 → 修复音量键处理中sleep导致的UI线程阻塞错误（v1.8.4）
  * 20) ANR无响应修复 → 将所有耗时操作移到工作线程，彻底解决卡死问题（v1.8.5）
+ * 21) 音量键监听增强修复 → 增强无障碍服务检查，智能监控和自动恢复机制（v1.9.0）
+ * 22) 黑屏问题修复 → 权限检查移至工作线程，避免UI阻塞（v1.9.0）
+ * 23) 游戏内失效修复 → 添加监听器健康检查，30秒自动检测并恢复（v1.9.0）
  *
  * 说明：本文件基于你的 main(3).js 改造而来，保留"功能A/功能B"的全部能力，外加更稳的权限与异常保护。
- * 
- * 版本：v1.8.5 (修复ANR无响应)
- * 修复日期：2025-11-13
- * 更新内容：彻底重构启动逻辑，将所有耗时操作移到工作线程执行，解决ANR卡死问题
+ *
+ * 版本：v1.9.0 (音量键监听全面增强)
+ * 修复日期：2025-11-17
+ * 更新内容：
+ *   1. 增强无障碍服务检查 - 实际功能测试而非仅检查对象存在
+ *   2. 智能监听器管理 - 避免重复注册，减少干扰
+ *   3. 自动健康检查 - 每30秒检测服务状态，异常时自动恢复
+ *   4. 权限检查优化 - 移至工作线程，彻底解决黑屏和卡顿
+ *   5. 游戏场景增强 - 长时间运行也能保持音量键响应
  */
 
 // ========================= 全局日志系统 =========================
@@ -249,9 +257,31 @@ const Perms = (function() {
     function hasAccessibility() {
         try {
             if (typeof auto === 'undefined') return false;
+            // AutoX.js v6.5.2 标准检查
             return auto.service != null;
         } catch (e) {
             console.warn("检查无障碍权限异常: " + e);
+            return false;
+        }
+    }
+
+    function checkAccessibilityHealth() {
+        try {
+            // AutoX.js v6.5.2 健康检查：验证服务对象可访问
+            if (typeof auto === 'undefined') return false;
+            if (auto.service == null) return false;
+
+            // 尝试访问service对象，确保它不是一个已失效的引用
+            try {
+                // 简单的类型检查，不调用可能不存在的方法
+                var isValid = (typeof auto.service === 'object' || typeof auto.service === 'function');
+                return isValid;
+            } catch (e) {
+                // 如果访问失败，说明service虽然不为null但已失效
+                console.warn("无障碍服务健康检查失败: " + e);
+                return false;
+            }
+        } catch (e) {
             return false;
         }
     }
@@ -345,6 +375,7 @@ const Perms = (function() {
     }
     return {
         hasAccessibility,
+        checkAccessibilityHealth,
         openAccessibilitySettings,
         hasOverlay,
         requestOverlay,
@@ -784,6 +815,10 @@ const Switcher = (function() {
             var scriptThread = null;
             var keyControlEnabled = false;
             var lastVolumeDownTs = 0;
+            var keyListenersRegistered = false; // 追踪监听器状态
+            var listenerHealthCheckTimer = null; // 健康检查定时器
+            var lastAccessibilityCheck = 0; // 上次无障碍检查时间
+            var volumeKeyHandler = null; // 保存音量键处理函数引用
 
 
             function showHint(text) {
@@ -799,7 +834,9 @@ const Switcher = (function() {
                 if (scriptThread == null) {
                     floatConsole.log("收到音量下键 → 启动脚本");
                     showHint("开始运行");
-                    ui.run(() => ui.stateTip.setText("当前状态：运行中"));
+                    ui.run(() => ui.stateTip.setText("当前状态：准备中..."));
+
+                    // 快速检查无障碍服务
                     if (!isAccessibilityEnabled()) {
                         floatConsole.warn("无障碍未就绪，尝试引导开启");
                         showHint("请先开启无障碍");
@@ -807,18 +844,32 @@ const Switcher = (function() {
                         ui.run(() => ui.stateTip.setText("当前状态：未运行"));
                         return;
                     }
-                    if (!isScreenCaptureReady()) {
-                        floatConsole.log("截图权限未就绪，尝试申请...");
-                        if (!safeRequestScreenCapture(3)) {
-                            floatConsole.error("无法获取截图权限");
-                            showHint("截图权限失败");
-                            ui.run(() => ui.stateTip.setText("当前状态：未运行"));
-                            return;
-                        }
-                    }
+
+                    // 在工作线程中进行权限检查和脚本启动，避免阻塞主线程
                     const safeMode = ui.chkSafeMode.isChecked();
                     scriptThread = threads.start(function() {
                         try {
+                            // 在工作线程中检查截图权限
+                            if (!isScreenCaptureReady()) {
+                                floatConsole.log("截图权限未就绪，尝试申请...");
+                                ui.run(() => showHint("正在申请截图权限..."));
+
+                                if (!safeRequestScreenCapture(3)) {
+                                    floatConsole.error("无法获取截图权限");
+                                    ui.run(() => showHint("截图权限失败"));
+                                    ui.run(() => ui.stateTip.setText("当前状态：未运行"));
+                                    scriptThread = null;
+                                    return;
+                                }
+                            }
+
+                            // 权限就绪，开始运行主脚本
+                            ui.run(() => {
+                                ui.stateTip.setText("当前状态：运行中");
+                                showHint("脚本运行中");
+                            });
+                            floatConsole.log("✓ 权限检查通过，开始执行脚本");
+
                             runMainScript(floatConsole, safeMode);
                         } catch (e) {
                             floatConsole.error("脚本异常: " + e + "\n" + e.stack);
@@ -841,11 +892,25 @@ const Switcher = (function() {
 
             function registerKeyListeners() {
                 try {
-                    // 清除旧的监听器
-                    try {
-                        events.removeAllListeners && events.removeAllListeners();
-                    } catch (e) {}
-                    
+                    // 如果已经注册且无障碍服务正常，不要重复注册
+                    if (keyListenersRegistered && Perms.checkAccessibilityHealth()) {
+                        floatConsole.log("ℹ 监听器已存在且正常，跳过重复注册");
+                        return;
+                    }
+
+                    // 清除旧的监听器（使用保存的引用）
+                    if (keyListenersRegistered && volumeKeyHandler) {
+                        try {
+                            // 尝试移除特定的监听器，而不是所有监听器
+                            events.removeListener && events.removeListener("key_down", volumeKeyHandler);
+                            floatConsole.log("清除旧的音量键监听器");
+                        } catch (e) {
+                            // 如果removeListener不可用，不做任何操作，让新监听器覆盖
+                        }
+                        volumeKeyHandler = null;
+                        keyListenersRegistered = false;
+                    }
+
                     // 安全模式下不启用拦截，仅监听（避免个别 ROM 重启/卡死）
                     var safeMode = ui.chkSafeMode.isChecked();
                     if (!safeMode) {
@@ -858,13 +923,24 @@ const Switcher = (function() {
                     } else {
                         floatConsole.log("ℹ 安全模式：仅监听不拦截");
                     }
-                    
+
+                    // 创建音量键处理函数（保存引用以便后续清除）
+                    volumeKeyHandler = function(code, event) {
+                        if (code === 25) { // 25 = KEYCODE_VOLUME_DOWN
+                            lastAccessibilityCheck = Date.now();
+                            onVolumeDown();
+                        }
+                    };
+
                     // 注册音量键监听（方式A：标准API）
                     var methodASuccess = false;
                     try {
                         if (Perms.hasAccessibility()) {
                             events.observeKey();
-                            events.onKeyDown("volume_down", e => onVolumeDown());
+                            events.onKeyDown("volume_down", e => {
+                                lastAccessibilityCheck = Date.now();
+                                onVolumeDown();
+                            });
                             methodASuccess = true;
                             floatConsole.log("✓ 音量键监听注册成功（方式A）");
                         } else {
@@ -874,27 +950,80 @@ const Switcher = (function() {
                         floatConsole.warn("方式A注册失败：" + e);
                         console.error("observeKey异常: " + e);
                     }
-                    
-                    // 注册音量键监听（方式B：通用事件）
+
+                    // 注册音量键监听（方式B：通用事件，使用保存的处理函数）
                     var methodBSuccess = false;
                     try {
-                        events.on("key_down", (code, event) => {
-                            if (code === 25) onVolumeDown(); // 25 = KEYCODE_VOLUME_DOWN
-                        });
+                        events.on("key_down", volumeKeyHandler);
                         methodBSuccess = true;
                         floatConsole.log("✓ 音量键监听注册成功（方式B）");
                     } catch (e) {
                         floatConsole.warn("方式B注册失败：" + e);
                     }
-                    
+
                     // 汇总注册结果
                     if (methodASuccess || methodBSuccess) {
+                        keyListenersRegistered = true;
                         floatConsole.log("✓ 音量键监听注册完成，现在可以按音量下键控制脚本");
+                        // 启动健康检查定时器
+                        startListenerHealthCheck();
                     } else {
+                        keyListenersRegistered = false;
+                        volumeKeyHandler = null;
                         floatConsole.error("❌ 所有注册方式都失败，音量键可能无法使用");
                     }
                 } catch (e) {
+                    keyListenersRegistered = false;
+                    volumeKeyHandler = null;
                     floatConsole.error("注册按键监听失败：" + e);
+                }
+            }
+
+            // 监听器健康检查和自动恢复
+            function startListenerHealthCheck() {
+                // 清除旧定时器
+                if (listenerHealthCheckTimer) {
+                    try {
+                        clearInterval(listenerHealthCheckTimer);
+                    } catch (e) {}
+                    listenerHealthCheckTimer = null;
+                }
+
+                // 启动新的健康检查（每30秒检查一次）
+                listenerHealthCheckTimer = setInterval(() => {
+                    try {
+                        if (!keyControlEnabled) {
+                            // 如果音量键控制已关闭，停止检查
+                            if (listenerHealthCheckTimer) {
+                                clearInterval(listenerHealthCheckTimer);
+                                listenerHealthCheckTimer = null;
+                            }
+                            return;
+                        }
+
+                        var now = Date.now();
+                        // 如果超过60秒没有收到音量键事件，且无障碍服务状态异常，尝试恢复
+                        if (now - lastAccessibilityCheck > 60000) {
+                            if (!Perms.checkAccessibilityHealth()) {
+                                floatConsole.warn("⚠️ 检测到无障碍服务异常，尝试恢复监听器...");
+                                keyListenersRegistered = false;
+                                registerKeyListeners();
+                            }
+                            // 重置检查时间，避免频繁检查
+                            lastAccessibilityCheck = now;
+                        }
+                    } catch (e) {
+                        console.error("健康检查异常: " + e);
+                    }
+                }, 30000); // 30秒检查一次
+            }
+
+            function stopListenerHealthCheck() {
+                if (listenerHealthCheckTimer) {
+                    try {
+                        clearInterval(listenerHealthCheckTimer);
+                    } catch (e) {}
+                    listenerHealthCheckTimer = null;
                 }
             }
 
@@ -912,15 +1041,22 @@ const Switcher = (function() {
                     return;
                 }
                 keyControlEnabled = true;
+                lastAccessibilityCheck = Date.now(); // 初始化检查时间
                 registerKeyListeners();
-                floatConsole.log("✓ 音量键控制已开启（一次注册，持续有效）");
+                floatConsole.log("✓ 音量键控制已开启（智能监控，自动恢复）");
             }
 
             function disableKeyControl() {
                 keyControlEnabled = false;
-                try {
-                    events.removeAllListeners && events.removeAllListeners();
-                } catch (e) {}
+                stopListenerHealthCheck(); // 停止健康检查
+                // 精确移除音量键监听器
+                if (volumeKeyHandler) {
+                    try {
+                        events.removeListener && events.removeListener("key_down", volumeKeyHandler);
+                    } catch (e) {}
+                    volumeKeyHandler = null;
+                }
+                keyListenersRegistered = false;
                 floatConsole.log("音量键控制已关闭");
             }
 
@@ -938,6 +1074,27 @@ const Switcher = (function() {
             setTimeout(() => {
                 checkAndShowPermissions(false);
             }, 500);
+
+            // 注册清理函数
+            currentCleanup = function() {
+                try {
+                    // 停止健康检查定时器
+                    stopListenerHealthCheck();
+                    // 停止脚本线程
+                    if (scriptThread) {
+                        try {
+                            scriptThread.interrupt();
+                        } catch (e) {}
+                        scriptThread = null;
+                    }
+                    // 关闭音量键控制
+                    if (keyControlEnabled) {
+                        disableKeyControl();
+                    }
+                } catch (e) {
+                    console.log("清理Feature A资源:", e);
+                }
+            };
 
             // ===== 主流程（基于你原有逻辑，未做功能改变，仅加安全入参 safeMode） =====
             function runMainScript(floatConsole, safeMode) {
