@@ -257,17 +257,8 @@ const Perms = (function() {
     function hasAccessibility() {
         try {
             if (typeof auto === 'undefined') return false;
-            if (auto.service == null) return false;
-
-            // 增强检查：验证服务真正可用
-            try {
-                // 测试基本功能（获取根节点）
-                auto.service.performGlobalAction(0); // 测试服务响应
-                return true;
-            } catch (serviceError) {
-                console.warn("无障碍服务存在但不可用: " + serviceError);
-                return false;
-            }
+            // AutoX.js v6.5.2 标准检查
+            return auto.service != null;
         } catch (e) {
             console.warn("检查无障碍权限异常: " + e);
             return false;
@@ -276,16 +267,20 @@ const Perms = (function() {
 
     function checkAccessibilityHealth() {
         try {
-            if (!hasAccessibility()) return false;
-            // 额外健康检查：尝试执行一个安全操作
+            // AutoX.js v6.5.2 健康检查：验证服务对象可访问
+            if (typeof auto === 'undefined') return false;
+            if (auto.service == null) return false;
+
+            // 尝试访问service对象，确保它不是一个已失效的引用
             try {
-                if (typeof device !== 'undefined' && device.width && device.height) {
-                    return true;
-                }
+                // 简单的类型检查，不调用可能不存在的方法
+                var isValid = (typeof auto.service === 'object' || typeof auto.service === 'function');
+                return isValid;
             } catch (e) {
+                // 如果访问失败，说明service虽然不为null但已失效
                 console.warn("无障碍服务健康检查失败: " + e);
+                return false;
             }
-            return true;
         } catch (e) {
             return false;
         }
@@ -823,6 +818,7 @@ const Switcher = (function() {
             var keyListenersRegistered = false; // 追踪监听器状态
             var listenerHealthCheckTimer = null; // 健康检查定时器
             var lastAccessibilityCheck = 0; // 上次无障碍检查时间
+            var volumeKeyHandler = null; // 保存音量键处理函数引用
 
 
             function showHint(text) {
@@ -902,12 +898,16 @@ const Switcher = (function() {
                         return;
                     }
 
-                    // 只在真正需要重新注册时才清除监听器
-                    if (keyListenersRegistered) {
+                    // 清除旧的监听器（使用保存的引用）
+                    if (keyListenersRegistered && volumeKeyHandler) {
                         try {
-                            events.removeAllListeners && events.removeAllListeners();
-                            floatConsole.log("清除旧监听器以重新注册");
-                        } catch (e) {}
+                            // 尝试移除特定的监听器，而不是所有监听器
+                            events.removeListener && events.removeListener("key_down", volumeKeyHandler);
+                            floatConsole.log("清除旧的音量键监听器");
+                        } catch (e) {
+                            // 如果removeListener不可用，不做任何操作，让新监听器覆盖
+                        }
+                        volumeKeyHandler = null;
                         keyListenersRegistered = false;
                     }
 
@@ -924,13 +924,20 @@ const Switcher = (function() {
                         floatConsole.log("ℹ 安全模式：仅监听不拦截");
                     }
 
+                    // 创建音量键处理函数（保存引用以便后续清除）
+                    volumeKeyHandler = function(code, event) {
+                        if (code === 25) { // 25 = KEYCODE_VOLUME_DOWN
+                            lastAccessibilityCheck = Date.now();
+                            onVolumeDown();
+                        }
+                    };
+
                     // 注册音量键监听（方式A：标准API）
                     var methodASuccess = false;
                     try {
                         if (Perms.hasAccessibility()) {
                             events.observeKey();
                             events.onKeyDown("volume_down", e => {
-                                // 更新最后活跃时间
                                 lastAccessibilityCheck = Date.now();
                                 onVolumeDown();
                             });
@@ -944,16 +951,10 @@ const Switcher = (function() {
                         console.error("observeKey异常: " + e);
                     }
 
-                    // 注册音量键监听（方式B：通用事件）
+                    // 注册音量键监听（方式B：通用事件，使用保存的处理函数）
                     var methodBSuccess = false;
                     try {
-                        events.on("key_down", (code, event) => {
-                            if (code === 25) {
-                                // 更新最后活跃时间
-                                lastAccessibilityCheck = Date.now();
-                                onVolumeDown(); // 25 = KEYCODE_VOLUME_DOWN
-                            }
-                        });
+                        events.on("key_down", volumeKeyHandler);
                         methodBSuccess = true;
                         floatConsole.log("✓ 音量键监听注册成功（方式B）");
                     } catch (e) {
@@ -968,10 +969,12 @@ const Switcher = (function() {
                         startListenerHealthCheck();
                     } else {
                         keyListenersRegistered = false;
+                        volumeKeyHandler = null;
                         floatConsole.error("❌ 所有注册方式都失败，音量键可能无法使用");
                     }
                 } catch (e) {
                     keyListenersRegistered = false;
+                    volumeKeyHandler = null;
                     floatConsole.error("注册按键监听失败：" + e);
                 }
             }
@@ -1046,9 +1049,13 @@ const Switcher = (function() {
             function disableKeyControl() {
                 keyControlEnabled = false;
                 stopListenerHealthCheck(); // 停止健康检查
-                try {
-                    events.removeAllListeners && events.removeAllListeners();
-                } catch (e) {}
+                // 精确移除音量键监听器
+                if (volumeKeyHandler) {
+                    try {
+                        events.removeListener && events.removeListener("key_down", volumeKeyHandler);
+                    } catch (e) {}
+                    volumeKeyHandler = null;
+                }
                 keyListenersRegistered = false;
                 floatConsole.log("音量键控制已关闭");
             }
